@@ -1,4 +1,0 @@
-{
-  "installCommand": "npm install --legacy-peer-deps --no-audit --no-fund",
-  "framework": "nextjs"
-}
