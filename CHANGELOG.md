@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the 99 Names of Allah learning app.
+All notable changes to the Quranic Vocabulary learning app.
 
 ## Vision
 
@@ -8,11 +8,7 @@ All notable changes to the 99 Names of Allah learning app.
 
 **Problem:** Millions of people recite Quran daily without understanding. They know HOW to say the words but not WHAT they mean.
 
-**Solution:** Start with the 99 Names of Allah as gateway vocabulary. Each name is:
-- Commonly known and recited
-- Has a clear, distinct meaning
-- Appears throughout the Quran
-- Builds foundation for Quranic comprehension
+**Solution:** Start with the 99 Names of Allah as gateway vocabulary (Module 1). Future modules will cover more Quranic vocabulary.
 
 **App Goal:** Bridge from recitation → understanding. "Understand what you recite."
 
@@ -21,6 +17,26 @@ All notable changes to the 99 Names of Allah learning app.
 ## [Unreleased]
 
 ### Added
+- Platform restructured as "Quranic Vocabulary" (rebranded from "Asma ul Husna")
+- New lesson structure: 5 names per lesson with learn/review/checkpoint pattern
+- `lessonType` enum in database schema (`learn`, `review`, `checkpoint`)
+- Lesson structure constants in `constants.ts`:
+  - `NAMES_PER_LESSON = 5`
+  - `REVIEW_FREQUENCY = 2` (review after every 2 learn lessons)
+  - `REVIEW_OLD_RATIO = 0.3` (30% old names in reviews)
+- Review lessons mix 70% current unit + 30% previous units
+- Checkpoint lessons at end of each unit (15 names)
+- Completely rewritten seed script with improved lesson generation
+
+### Changed
+- App title: "Quranic Vocabulary - Learn the Language of the Quran"
+- Course structure: 7 units → ~37 lessons → ~450 challenges (vs old 99 lessons)
+- Each unit covers 15 names (was 10)
+- Lessons now teach 5 names at a time (was 1 name per lesson)
+- Learn lessons have intro (ASSIST) + practice (SELECT) phases
+- Review lessons pull from previous units for spaced review
+
+### Previous Changes
 - 99 Arabic audio files generated using macOS TTS (Majed voice) - `/public/audio/`
 - JSON data file with all 99 Names and audio paths - `/public/data/99-names-with-audio.json`
 - Seed script for 99 Names of Allah content - `scripts/seed-99-names.ts`

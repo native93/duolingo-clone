@@ -3,9 +3,71 @@ import { useCallback } from "react";
 import Image from "next/image";
 import { useAudio, useKey } from "react-use";
 
-import { getTextDirection } from "@/lib/arabic";
+import { containsArabic, getTextDirection } from "@/lib/arabic";
 import { challenges } from "@/db/schema";
 import { cn } from "@/lib/utils";
+
+// Parse mixed Arabic/English text like "الْقُدُّوسُ (Al-Quddus)"
+function parseArabicText(text: string): { arabic: string; transliteration: string } | null {
+  const match = text.match(/^(.+?)\s*\(([^)]+)\)$/);
+  if (match && containsArabic(match[1])) {
+    return { arabic: match[1].trim(), transliteration: match[2] };
+  }
+  return null;
+}
+
+// Render text with proper Arabic/English separation
+function renderText(
+  text: string,
+  selected?: boolean,
+  status?: "correct" | "wrong" | "none"
+) {
+  const parsed = parseArabicText(text);
+  const colorClass = cn(
+    selected && "text-sky-500",
+    selected && status === "correct" && "text-green-500",
+    selected && status === "wrong" && "text-rose-500"
+  );
+
+  if (parsed) {
+    // Two-line layout: Arabic on top, transliteration below
+    return (
+      <div className="flex flex-col items-center text-center">
+        <p
+          dir="rtl"
+          className={cn(
+            "font-arabic text-2xl text-neutral-600 lg:text-3xl",
+            colorClass
+          )}
+        >
+          {parsed.arabic}
+        </p>
+        <p
+          className={cn(
+            "text-sm text-neutral-500 lg:text-base",
+            colorClass
+          )}
+        >
+          ({parsed.transliteration})
+        </p>
+      </div>
+    );
+  }
+
+  // Regular text (pure Arabic or pure English)
+  return (
+    <p
+      dir={getTextDirection(text)}
+      className={cn(
+        "text-sm text-neutral-600 lg:text-base",
+        getTextDirection(text) === "rtl" && "font-arabic text-2xl lg:text-3xl",
+        colorClass
+      )}
+    >
+      {text}
+    </p>
+  );
+}
 
 type CardProps = {
   id: number;
@@ -73,18 +135,7 @@ export const Card = ({
         )}
       >
         {type === "ASSIST" && <div aria-hidden />}
-        <p
-          dir={getTextDirection(text)}
-          className={cn(
-            "text-sm text-neutral-600 lg:text-base",
-            getTextDirection(text) === "rtl" && "font-arabic text-2xl lg:text-3xl",
-            selected && "text-sky-500",
-            selected && status === "correct" && "text-green-500",
-            selected && status === "wrong" && "text-rose-500"
-          )}
-        >
-          {text}
-        </p>
+        {renderText(text, selected, status)}
 
         <div
           className={cn(

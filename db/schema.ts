@@ -41,6 +41,8 @@ export const unitsRelations = relations(units, ({ many, one }) => ({
   lessons: many(lessons),
 }));
 
+export const lessonTypeEnum = pgEnum("lesson_type", ["learn", "review", "checkpoint"]);
+
 export const lessons = pgTable("lessons", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -50,6 +52,7 @@ export const lessons = pgTable("lessons", {
     })
     .notNull(),
   order: integer("order").notNull(),
+  lessonType: lessonTypeEnum("lesson_type").notNull().default("learn"),
 });
 
 export const lessonsRelations = relations(lessons, ({ one, many }) => ({

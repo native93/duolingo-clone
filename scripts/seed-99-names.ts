@@ -5,6 +5,14 @@ import * as fs from "fs";
 import * as path from "path";
 
 import * as schema from "@/db/schema";
+import {
+  NAMES_PER_LESSON,
+  REVIEW_FREQUENCY,
+  REVIEW_OLD_RATIO,
+  CHALLENGES_PER_LEARN_LESSON,
+  CHALLENGES_PER_REVIEW_LESSON,
+  CHALLENGES_PER_CHECKPOINT,
+} from "@/constants";
 
 const sql = neon(process.env.DATABASE_URL!);
 const db = drizzle(sql, { schema });
@@ -18,67 +26,475 @@ const namesData = JSON.parse(
 ) as {
   number: number;
   arabic: string;
+  arabicPlain: string;
   transliteration: string;
   meaning: string;
   audioSrc: string;
 }[];
 
-// Helper to get random wrong options (excluding the correct answer)
+// Shuffle array helper
+function shuffle<T>(array: T[]): T[] {
+  const result = [...array];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+// Get random wrong options (excluding specific indices)
 function getRandomWrongOptions(
-  correctIndex: number,
+  excludeIndices: Set<number>,
   count: number
 ): typeof namesData {
   const options: typeof namesData = [];
-  const usedIndices = new Set<number>([correctIndex]);
+  const available = namesData.filter((_, idx) => !excludeIndices.has(idx));
+  const shuffled = shuffle(available);
+  return shuffled.slice(0, count);
+}
 
-  while (options.length < count) {
-    const randomIndex = Math.floor(Math.random() * namesData.length);
-    if (!usedIndices.has(randomIndex)) {
-      usedIndices.add(randomIndex);
-      options.push(namesData[randomIndex]);
+// Get similar meaning distractors (for harder checkpoint questions)
+function getSimilarDistractors(
+  correctName: (typeof namesData)[0],
+  count: number
+): typeof namesData {
+  // For now, just get random ones (future: implement semantic similarity)
+  return getRandomWrongOptions(new Set([correctName.number - 1]), count);
+}
+
+type LessonType = "learn" | "review" | "checkpoint";
+
+interface LessonPlan {
+  type: LessonType;
+  title: string;
+  names: typeof namesData; // Names to teach/review in this lesson
+  reviewPool?: typeof namesData; // Additional names for review mixing
+}
+
+// Generate lesson plan for a unit
+function generateUnitLessonPlan(
+  unitNames: typeof namesData,
+  previousUnitNames: typeof namesData
+): LessonPlan[] {
+  const lessons: LessonPlan[] = [];
+  const learnLessonNames: (typeof namesData)[] = [];
+
+  // Split unit names into groups of NAMES_PER_LESSON
+  for (let i = 0; i < unitNames.length; i += NAMES_PER_LESSON) {
+    const lessonNames = unitNames.slice(i, i + NAMES_PER_LESSON);
+    learnLessonNames.push(lessonNames);
+
+    // Create learn lesson
+    const startNum = lessonNames[0].number;
+    const endNum = lessonNames[lessonNames.length - 1].number;
+    lessons.push({
+      type: "learn",
+      title: `Learn Names ${startNum}-${endNum}`,
+      names: lessonNames,
+    });
+
+    // Add review lesson after every REVIEW_FREQUENCY learn lessons
+    if (learnLessonNames.length % REVIEW_FREQUENCY === 0) {
+      const reviewNames = learnLessonNames.flat();
+      const reviewStart = reviewNames[0].number;
+      const reviewEnd = reviewNames[reviewNames.length - 1].number;
+      lessons.push({
+        type: "review",
+        title: `Review Names ${reviewStart}-${reviewEnd}`,
+        names: reviewNames,
+        reviewPool: previousUnitNames,
+      });
     }
   }
 
-  return options;
+  // Add checkpoint at the end of the unit
+  lessons.push({
+    type: "checkpoint",
+    title: `Checkpoint: All Unit Names`,
+    names: unitNames,
+  });
+
+  return lessons;
 }
 
-const main = async () => {
-  try {
-    console.log("🕌 Seeding database with 99 Names of Allah...\n");
+// Create challenges for a learn lesson
+async function createLearnLessonChallenges(
+  lessonId: number,
+  names: typeof namesData
+): Promise<number> {
+  let challengeOrder = 0;
 
-    // Delete all existing data
-    console.log("Clearing existing data...");
-    await Promise.all([
-      db.delete(schema.challengeProgress),
-      db.delete(schema.challengeOptions),
-      db.delete(schema.challenges),
-      db.delete(schema.lessons),
-      db.delete(schema.units),
-      db.delete(schema.userProgress),
-      db.delete(schema.courses),
-    ]);
-
-    // Insert the course
-    console.log("Creating course: Asma ul Husna...");
-    const [course] = await db
-      .insert(schema.courses)
+  // Phase 1: Introduction (ASSIST) - 1 per name
+  for (const name of names) {
+    const [challenge] = await db
+      .insert(schema.challenges)
       .values([
         {
-          title: "Asma ul Husna",
-          imageSrc: "/kaaba.svg", // We'll need to add this icon
+          lessonId,
+          type: "ASSIST",
+          question: `"${name.meaning}"`,
+          order: ++challengeOrder,
         },
       ])
       .returning();
 
-    // Split 99 names into 10 units
-    const namesPerUnit = 10;
-    const unitCount = Math.ceil(namesData.length / namesPerUnit);
+    const wrongOptions = getRandomWrongOptions(new Set([name.number - 1]), 2);
+    const options = shuffle([
+      { ...name, correct: true },
+      { ...wrongOptions[0], correct: false },
+      { ...wrongOptions[1], correct: false },
+    ]);
+
+    await db.insert(schema.challengeOptions).values(
+      options.map((opt) => ({
+        challengeId: challenge.id,
+        correct: opt.correct,
+        text: opt.arabic,
+        audioSrc: opt.audioSrc,
+      }))
+    );
+  }
+
+  // Phase 2: Practice (SELECT) - 2 per name, mixed order
+  const practiceQuestions: Array<{
+    name: (typeof namesData)[0];
+    questionType: "arabic-to-meaning" | "meaning-to-arabic";
+  }> = [];
+
+  for (const name of names) {
+    practiceQuestions.push({ name, questionType: "arabic-to-meaning" });
+    practiceQuestions.push({ name, questionType: "meaning-to-arabic" });
+  }
+
+  const shuffledPractice = shuffle(practiceQuestions);
+
+  for (const { name, questionType } of shuffledPractice) {
+    if (questionType === "arabic-to-meaning") {
+      // "What does [Arabic] mean?"
+      const [challenge] = await db
+        .insert(schema.challenges)
+        .values([
+          {
+            lessonId,
+            type: "SELECT",
+            question: `What does "${name.arabic}" mean?`,
+            order: ++challengeOrder,
+          },
+        ])
+        .returning();
+
+      const wrongOptions = getRandomWrongOptions(new Set([name.number - 1]), 2);
+      const options = shuffle([
+        { ...name, correct: true },
+        { ...wrongOptions[0], correct: false },
+        { ...wrongOptions[1], correct: false },
+      ]);
+
+      await db.insert(schema.challengeOptions).values(
+        options.map((opt) => ({
+          challengeId: challenge.id,
+          correct: opt.correct,
+          text: opt.meaning,
+          audioSrc: opt.audioSrc,
+        }))
+      );
+    } else {
+      // "Which name means [meaning]?"
+      const [challenge] = await db
+        .insert(schema.challenges)
+        .values([
+          {
+            lessonId,
+            type: "SELECT",
+            question: `Which name means "${name.meaning}"?`,
+            order: ++challengeOrder,
+          },
+        ])
+        .returning();
+
+      const wrongOptions = getRandomWrongOptions(new Set([name.number - 1]), 2);
+      const options = shuffle([
+        { ...name, correct: true },
+        { ...wrongOptions[0], correct: false },
+        { ...wrongOptions[1], correct: false },
+      ]);
+
+      await db.insert(schema.challengeOptions).values(
+        options.map((opt) => ({
+          challengeId: challenge.id,
+          correct: opt.correct,
+          text: `${opt.arabic} (${opt.transliteration})`,
+          audioSrc: opt.audioSrc,
+        }))
+      );
+    }
+  }
+
+  return challengeOrder;
+}
+
+// Create challenges for a review lesson
+async function createReviewLessonChallenges(
+  lessonId: number,
+  currentNames: typeof namesData,
+  reviewPool: typeof namesData
+): Promise<number> {
+  let challengeOrder = 0;
+
+  // Calculate how many old names to include (30% of total)
+  const oldNameCount = Math.floor(CHALLENGES_PER_REVIEW_LESSON * REVIEW_OLD_RATIO);
+  const currentNameCount = CHALLENGES_PER_REVIEW_LESSON - oldNameCount;
+
+  // Get random old names from review pool
+  const oldNames = reviewPool.length > 0 ? shuffle(reviewPool).slice(0, oldNameCount) : [];
+
+  // Build challenge pool
+  const challengePool: Array<{
+    name: (typeof namesData)[0];
+    isOld: boolean;
+  }> = [];
+
+  // Add current unit names
+  const shuffledCurrent = shuffle(currentNames);
+  for (let i = 0; i < Math.min(currentNameCount, shuffledCurrent.length); i++) {
+    challengePool.push({ name: shuffledCurrent[i], isOld: false });
+  }
+
+  // Add old names
+  for (const name of oldNames) {
+    challengePool.push({ name, isOld: true });
+  }
+
+  // Shuffle the pool
+  const shuffledPool = shuffle(challengePool);
+
+  // Generate challenges
+  for (const { name, isOld } of shuffledPool) {
+    const questionType = Math.random() < 0.5 ? "arabic-to-meaning" : "meaning-to-arabic";
+
+    if (questionType === "arabic-to-meaning") {
+      const [challenge] = await db
+        .insert(schema.challenges)
+        .values([
+          {
+            lessonId,
+            type: "SELECT",
+            question: `What does "${name.arabic}" mean?`,
+            order: ++challengeOrder,
+          },
+        ])
+        .returning();
+
+      const wrongOptions = getRandomWrongOptions(new Set([name.number - 1]), 2);
+      const options = shuffle([
+        { ...name, correct: true },
+        { ...wrongOptions[0], correct: false },
+        { ...wrongOptions[1], correct: false },
+      ]);
+
+      await db.insert(schema.challengeOptions).values(
+        options.map((opt) => ({
+          challengeId: challenge.id,
+          correct: opt.correct,
+          text: opt.meaning,
+          audioSrc: opt.audioSrc,
+        }))
+      );
+    } else {
+      const [challenge] = await db
+        .insert(schema.challenges)
+        .values([
+          {
+            lessonId,
+            type: "SELECT",
+            question: `Which name means "${name.meaning}"?`,
+            order: ++challengeOrder,
+          },
+        ])
+        .returning();
+
+      const wrongOptions = getRandomWrongOptions(new Set([name.number - 1]), 2);
+      const options = shuffle([
+        { ...name, correct: true },
+        { ...wrongOptions[0], correct: false },
+        { ...wrongOptions[1], correct: false },
+      ]);
+
+      await db.insert(schema.challengeOptions).values(
+        options.map((opt) => ({
+          challengeId: challenge.id,
+          correct: opt.correct,
+          text: `${opt.arabic} (${opt.transliteration})`,
+          audioSrc: opt.audioSrc,
+        }))
+      );
+    }
+  }
+
+  return challengeOrder;
+}
+
+// Create challenges for a checkpoint lesson
+async function createCheckpointChallenges(
+  lessonId: number,
+  unitNames: typeof namesData
+): Promise<number> {
+  let challengeOrder = 0;
+
+  // Create mixed challenges covering all unit names
+  const challengePool: Array<{
+    name: (typeof namesData)[0];
+    questionType: "arabic-to-meaning" | "meaning-to-arabic" | "assist";
+  }> = [];
+
+  // Add variety of question types for each name
+  for (const name of unitNames) {
+    // Randomly select question type with distribution
+    const rand = Math.random();
+    if (rand < 0.4) {
+      challengePool.push({ name, questionType: "arabic-to-meaning" });
+    } else if (rand < 0.8) {
+      challengePool.push({ name, questionType: "meaning-to-arabic" });
+    } else {
+      challengePool.push({ name, questionType: "assist" });
+    }
+  }
+
+  // Shuffle and limit to checkpoint size
+  const shuffledPool = shuffle(challengePool).slice(0, CHALLENGES_PER_CHECKPOINT);
+
+  for (const { name, questionType } of shuffledPool) {
+    if (questionType === "assist") {
+      const [challenge] = await db
+        .insert(schema.challenges)
+        .values([
+          {
+            lessonId,
+            type: "ASSIST",
+            question: `"${name.meaning}"`,
+            order: ++challengeOrder,
+          },
+        ])
+        .returning();
+
+      // Use similar distractors for harder checkpoint
+      const wrongOptions = getSimilarDistractors(name, 2);
+      const options = shuffle([
+        { ...name, correct: true },
+        { ...wrongOptions[0], correct: false },
+        { ...wrongOptions[1], correct: false },
+      ]);
+
+      await db.insert(schema.challengeOptions).values(
+        options.map((opt) => ({
+          challengeId: challenge.id,
+          correct: opt.correct,
+          text: opt.arabic,
+          audioSrc: opt.audioSrc,
+        }))
+      );
+    } else if (questionType === "arabic-to-meaning") {
+      const [challenge] = await db
+        .insert(schema.challenges)
+        .values([
+          {
+            lessonId,
+            type: "SELECT",
+            question: `What does "${name.arabic}" mean?`,
+            order: ++challengeOrder,
+          },
+        ])
+        .returning();
+
+      const wrongOptions = getSimilarDistractors(name, 2);
+      const options = shuffle([
+        { ...name, correct: true },
+        { ...wrongOptions[0], correct: false },
+        { ...wrongOptions[1], correct: false },
+      ]);
+
+      await db.insert(schema.challengeOptions).values(
+        options.map((opt) => ({
+          challengeId: challenge.id,
+          correct: opt.correct,
+          text: opt.meaning,
+          audioSrc: opt.audioSrc,
+        }))
+      );
+    } else {
+      const [challenge] = await db
+        .insert(schema.challenges)
+        .values([
+          {
+            lessonId,
+            type: "SELECT",
+            question: `Which name means "${name.meaning}"?`,
+            order: ++challengeOrder,
+          },
+        ])
+        .returning();
+
+      const wrongOptions = getSimilarDistractors(name, 2);
+      const options = shuffle([
+        { ...name, correct: true },
+        { ...wrongOptions[0], correct: false },
+        { ...wrongOptions[1], correct: false },
+      ]);
+
+      await db.insert(schema.challengeOptions).values(
+        options.map((opt) => ({
+          challengeId: challenge.id,
+          correct: opt.correct,
+          text: `${opt.arabic} (${opt.transliteration})`,
+          audioSrc: opt.audioSrc,
+        }))
+      );
+    }
+  }
+
+  return challengeOrder;
+}
+
+const main = async () => {
+  try {
+    console.log("🕌 Seeding database with Quranic Vocabulary - 99 Names Module...\n");
+
+    // Delete all existing data (sequentially to avoid deadlocks)
+    console.log("Clearing existing data...");
+    await db.delete(schema.challengeProgress);
+    await db.delete(schema.challengeOptions);
+    await db.delete(schema.challenges);
+    await db.delete(schema.lessons);
+    await db.delete(schema.units);
+    await db.delete(schema.userProgress);
+    await db.delete(schema.courses);
+
+    // Insert the course
+    console.log("Creating course: 99 Names of Allah...");
+    const [course] = await db
+      .insert(schema.courses)
+      .values([
+        {
+          title: "99 Names of Allah",
+          imageSrc: "/kaaba.svg",
+        },
+      ])
+      .returning();
+
+    // Configuration for unit structure
+    const NAMES_PER_UNIT = 15; // Each unit covers 15 names
+    const unitCount = Math.ceil(namesData.length / NAMES_PER_UNIT);
+
+    let totalLessons = 0;
+    let totalChallenges = 0;
+    let totalOptions = 0;
+    let previousUnitNames: typeof namesData = [];
 
     for (let unitIndex = 0; unitIndex < unitCount; unitIndex++) {
-      const startName = unitIndex * namesPerUnit + 1;
-      const endName = Math.min((unitIndex + 1) * namesPerUnit, 99);
+      const startName = unitIndex * NAMES_PER_UNIT + 1;
+      const endName = Math.min((unitIndex + 1) * NAMES_PER_UNIT, 99);
 
-      console.log(`\nCreating Unit ${unitIndex + 1}: Names ${startName}-${endName}...`);
+      console.log(`\n📚 Creating Unit ${unitIndex + 1}: Names ${startName}-${endName}...`);
 
       // Insert unit
       const [unit] = await db
@@ -87,7 +503,7 @@ const main = async () => {
           {
             courseId: course.id,
             title: `Unit ${unitIndex + 1}`,
-            description: `Names ${startName}-${endName} of Allah`,
+            description: `Master Names ${startName}-${endName} of Allah`,
             order: unitIndex + 1,
           },
         ])
@@ -95,13 +511,17 @@ const main = async () => {
 
       // Get names for this unit
       const unitNames = namesData.slice(
-        unitIndex * namesPerUnit,
-        (unitIndex + 1) * namesPerUnit
+        unitIndex * NAMES_PER_UNIT,
+        (unitIndex + 1) * NAMES_PER_UNIT
       );
 
-      // Create one lesson per name in this unit
-      for (let lessonIndex = 0; lessonIndex < unitNames.length; lessonIndex++) {
-        const name = unitNames[lessonIndex];
+      // Generate lesson plan
+      const lessonPlan = generateUnitLessonPlan(unitNames, previousUnitNames);
+
+      console.log(`   Generating ${lessonPlan.length} lessons...`);
+
+      for (let lessonIndex = 0; lessonIndex < lessonPlan.length; lessonIndex++) {
+        const plan = lessonPlan[lessonIndex];
 
         // Insert lesson
         const [lesson] = await db
@@ -109,121 +529,55 @@ const main = async () => {
           .values([
             {
               unitId: unit.id,
-              title: name.transliteration,
+              title: plan.title,
               order: lessonIndex + 1,
+              lessonType: plan.type,
             },
           ])
           .returning();
 
-        // Create 3 challenges per lesson:
-        // 1. SELECT: "What does [Arabic] mean?" (with images/cards)
-        // 2. ASSIST: Match the meaning to the Arabic (audio-based)
-        // 3. SELECT: "Which name means [meaning]?" (reverse quiz)
+        totalLessons++;
 
-        // Challenge 1: What does this Arabic name mean?
-        const [challenge1] = await db
-          .insert(schema.challenges)
-          .values([
-            {
-              lessonId: lesson.id,
-              type: "SELECT",
-              question: `What does "${name.arabic}" mean?`,
-              order: 1,
-            },
-          ])
-          .returning();
+        // Create challenges based on lesson type
+        let challengeCount = 0;
+        if (plan.type === "learn") {
+          challengeCount = await createLearnLessonChallenges(lesson.id, plan.names);
+        } else if (plan.type === "review") {
+          challengeCount = await createReviewLessonChallenges(
+            lesson.id,
+            plan.names,
+            plan.reviewPool || []
+          );
+        } else if (plan.type === "checkpoint") {
+          challengeCount = await createCheckpointChallenges(lesson.id, plan.names);
+        }
 
-        // Get 2 random wrong meanings
-        const wrongOptions1 = getRandomWrongOptions(name.number - 1, 2);
+        totalChallenges += challengeCount;
+        totalOptions += challengeCount * 3; // 3 options per challenge
 
-        // Shuffle options (correct answer at random position)
-        const options1 = [
-          { ...name, correct: true },
-          { ...wrongOptions1[0], correct: false },
-          { ...wrongOptions1[1], correct: false },
-        ].sort(() => Math.random() - 0.5);
-
-        await db.insert(schema.challengeOptions).values(
-          options1.map((opt) => ({
-            challengeId: challenge1.id,
-            correct: opt.correct,
-            text: opt.meaning,
-            audioSrc: opt.audioSrc,
-          }))
-        );
-
-        // Challenge 2: ASSIST type - listen and match
-        const [challenge2] = await db
-          .insert(schema.challenges)
-          .values([
-            {
-              lessonId: lesson.id,
-              type: "ASSIST",
-              question: `"${name.meaning}"`,
-              order: 2,
-            },
-          ])
-          .returning();
-
-        const wrongOptions2 = getRandomWrongOptions(name.number - 1, 2);
-
-        const options2 = [
-          { ...name, correct: true },
-          { ...wrongOptions2[0], correct: false },
-          { ...wrongOptions2[1], correct: false },
-        ].sort(() => Math.random() - 0.5);
-
-        await db.insert(schema.challengeOptions).values(
-          options2.map((opt) => ({
-            challengeId: challenge2.id,
-            correct: opt.correct,
-            text: opt.arabic,
-            audioSrc: opt.audioSrc,
-          }))
-        );
-
-        // Challenge 3: Reverse - which name means this?
-        const [challenge3] = await db
-          .insert(schema.challenges)
-          .values([
-            {
-              lessonId: lesson.id,
-              type: "SELECT",
-              question: `Which name means "${name.meaning}"?`,
-              order: 3,
-            },
-          ])
-          .returning();
-
-        const wrongOptions3 = getRandomWrongOptions(name.number - 1, 2);
-
-        const options3 = [
-          { ...name, correct: true },
-          { ...wrongOptions3[0], correct: false },
-          { ...wrongOptions3[1], correct: false },
-        ].sort(() => Math.random() - 0.5);
-
-        await db.insert(schema.challengeOptions).values(
-          options3.map((opt) => ({
-            challengeId: challenge3.id,
-            correct: opt.correct,
-            text: `${opt.arabic} (${opt.transliteration})`,
-            audioSrc: opt.audioSrc,
-          }))
-        );
-
-        console.log(`  ✓ Lesson: ${name.transliteration} - ${name.meaning}`);
+        const typeEmoji =
+          plan.type === "learn" ? "📖" : plan.type === "review" ? "🔄" : "✅";
+        console.log(`   ${typeEmoji} ${plan.title} (${challengeCount} challenges)`);
       }
+
+      // Update previous unit names for review mixing
+      previousUnitNames = [...previousUnitNames, ...unitNames];
     }
 
-    console.log("\n✅ Database seeded successfully with 99 Names of Allah!");
+    console.log("\n✅ Database seeded successfully with Quranic Vocabulary!");
     console.log(`
 Summary:
-- 1 Course: Asma ul Husna
-- ${unitCount} Units
-- 99 Lessons (one per name)
-- 297 Challenges (3 per name)
-- 891 Challenge Options (3 per challenge)
+- 1 Course: 99 Names of Allah
+- ${unitCount} Units (${NAMES_PER_UNIT} names each)
+- ${totalLessons} Lessons (learn + review + checkpoint)
+- ${totalChallenges} Challenges
+- ${totalOptions} Challenge Options
+
+Lesson Structure per Unit:
+- Learn Lessons: ${NAMES_PER_LESSON} names each
+- Review Lessons: After every ${REVIEW_FREQUENCY} learn lessons
+- Checkpoint: End of each unit
+- Review Mix: ${Math.round(REVIEW_OLD_RATIO * 100)}% from previous units
 `);
   } catch (error) {
     console.error("Error seeding database:", error);

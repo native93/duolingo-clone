@@ -10,7 +10,7 @@ vi.mock("next/image", () => ({
 
 // Mock react-use
 vi.mock("react-use", () => ({
-  useAudio: () => [null, {}, { play: vi.fn() }],
+  useAudio: () => [<audio key="mock-audio" />, {}, { play: vi.fn() }],
   useKey: vi.fn(),
 }));
 
@@ -96,7 +96,9 @@ describe("Card", () => {
   it("handles mixed Arabic-English text (transliteration with Arabic)", () => {
     render(<Card {...defaultProps} text="الرَّحْمَنُ (Ar Rahmaan)" />);
 
-    const text = screen.getByText("الرَّحْمَنُ (Ar Rahmaan)");
-    expect(text).toHaveAttribute("dir", "rtl");
+    // The component splits Arabic + transliteration into two elements
+    const arabicText = screen.getByText("الرَّحْمَنُ");
+    expect(arabicText).toHaveAttribute("dir", "rtl");
+    expect(screen.getByText("(Ar Rahmaan)")).toBeInTheDocument();
   });
 });

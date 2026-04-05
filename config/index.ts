@@ -1,24 +1,23 @@
 import type { Metadata } from "next";
 
 export const siteConfig: Metadata = {
-  title: "Asma ul Husna - Learn the 99 Names of Allah",
+  title: "Quranic Vocabulary - Learn the Language of the Quran",
   description:
-    "Learn and understand the 99 Beautiful Names of Allah through interactive lessons and quizzes. Bridge from recitation to comprehension.",
+    "Master Quranic Arabic vocabulary through interactive lessons. Start with the 99 Names of Allah and build your understanding of the Quran.",
   keywords: [
+    "quranic vocabulary",
+    "quran arabic",
     "99 names of allah",
     "asma ul husna",
     "islamic learning",
-    "quran vocabulary",
     "arabic learning",
     "muslim education",
-    "names of god",
-    "divine attributes",
-    "islamic app",
-    "learn arabic",
     "quran comprehension",
+    "learn quranic arabic",
+    "understand quran",
   ] as Array<string>,
   authors: {
-    name: "Asma ul Husna App",
+    name: "Quranic Vocabulary App",
     url: "https://github.com/sanidhyy/duolingo-clone",
   },
   icons: {

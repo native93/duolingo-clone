@@ -1,6 +1,6 @@
-# 99 Names of Allah - Learning App
+# Quranic Vocabulary - Learning App
 
-A free Quranic Arabic learning app focused on teaching the 99 Names of Allah (Asma ul Husna).
+A free Quranic Arabic learning app focused on teaching essential Islamic vocabulary through interactive lessons.
 
 > Forked from [sanidhyy/duolingo-clone](https://github.com/sanidhyy/duolingo-clone) and refactored for Islamic education.
 
@@ -28,14 +28,15 @@ A free Quranic Arabic learning app focused on teaching the 99 Names of Allah (As
    - `DATABASE_URL` - from Neon dashboard
 3. Run `bun install`
 4. Run `bun run db:push` to set up database
-5. Run `bun run db:seed` to seed 99 Names content
+5. Run `bun run db:seed` to seed content
 6. Run `bun dev` to start development server
 
 ## Content
 
-- 99 Names of Allah with Arabic text, transliteration, and English meanings
-- Audio pronunciation for each name (v1: TTS, planned: proper recordings)
+- Quranic vocabulary with Arabic text, transliteration, and English meanings
+- Audio pronunciation for each term
 - Quiz-style challenges to test recognition
+- Multiple lesson types: learn, review, and checkpoint
 
 ## Project Status
 
@@ -43,21 +44,19 @@ See [CHANGELOG.md](./CHANGELOG.md) for all decisions and progress tracking.
 
 ### Completed
 - [x] Fork and clone repository
-- [x] Generate 99 audio files (TTS placeholder)
+- [x] Generate audio files
 - [x] Create data JSON with audio paths
 - [x] Decision: Keep Clerk auth
 - [x] Decision: Hearts with practice-only refill
-- [x] Decision: TTS audio (v1), improve later
 - [x] Remove Stripe/payment integration
 
 ### In Progress
 - [ ] Add RTL support
 - [ ] Update branding
-- [ ] Seed database with 99 Names content
+- [ ] Seed database with vocabulary content
 
 ### Future
-- [ ] Replace TTS with proper recordings (tajweed-correct)
-- [ ] Add more lesson types
+- [ ] Add more vocabulary modules
 - [ ] Dark mode
 
 ---

@@ -65,14 +65,14 @@ describe("99 Names JSON Data", () => {
     });
   });
 
-  it("first name is Ar Rahmaan (The Beneficent)", () => {
-    expect(namesData[0].transliteration).toBe("Ar Rahmaan");
-    expect(namesData[0].meaning).toBe("The Beneficent");
+  it("first name is Ar-Rahmaan (The Most Compassionate)", () => {
+    expect(namesData[0].transliteration).toBe("Ar-Rahmaan");
+    expect(namesData[0].meaning).toBe("The Most Compassionate");
   });
 
-  it("last name is As Saboor (The Patient One)", () => {
-    expect(namesData[98].transliteration).toBe("As Saboor");
-    expect(namesData[98].meaning).toBe("The Patient One");
+  it("last name is As-Saboor (The Patient)", () => {
+    expect(namesData[98].transliteration).toBe("As-Saboor");
+    expect(namesData[98].meaning).toBe("The Patient");
   });
 
   it("all Arabic text contains Arabic characters", () => {
