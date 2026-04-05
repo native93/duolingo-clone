@@ -8,7 +8,7 @@ export const siteConfig: Metadata = {
     "quranic vocabulary",
     "quran arabic",
     "99 names of allah",
-    "asma ul husna",
+    "quranic vocabulary app",
     "islamic learning",
     "arabic learning",
     "muslim education",

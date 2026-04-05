@@ -24,7 +24,7 @@ export const Sidebar = ({ className }: SidebarProps) => {
           <Image src="/kaaba.svg" alt="Kaaba" height={40} width={40} />
 
           <h1 className="text-xl font-extrabold tracking-wide text-teal-600">
-            Asma ul Husna
+            Quranic Vocabulary
           </h1>
         </div>
       </Link>
