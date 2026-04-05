@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <!-- Kaaba base structure -->
+  <rect x="20" y="30" width="60" height="55" fill="#1a1a1a" stroke="#d4af37" stroke-width="2"/>
+
+  <!-- Golden band (Hizam) -->
+  <rect x="20" y="40" width="60" height="8" fill="#d4af37"/>
+
+  <!-- Door (golden) -->
+  <rect x="42" y="55" width="16" height="28" fill="#d4af37" rx="2"/>
+
+  <!-- Decorative pattern on band -->
+  <line x1="25" y1="44" x2="75" y2="44" stroke="#1a1a1a" stroke-width="1"/>
+
+  <!-- Kiswah draping effect (subtle lines) -->
+  <line x1="35" y1="48" x2="35" y2="85" stroke="#2a2a2a" stroke-width="0.5"/>
+  <line x1="50" y1="48" x2="50" y2="55" stroke="#2a2a2a" stroke-width="0.5"/>
+  <line x1="65" y1="48" x2="65" y2="85" stroke="#2a2a2a" stroke-width="0.5"/>
+
+  <!-- Top decorative element -->
+  <rect x="20" y="28" width="60" height="4" fill="#d4af37"/>
+</svg>

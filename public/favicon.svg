@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Kaaba base structure -->
+  <rect x="4" y="8" width="24" height="22" fill="#1a1a1a" stroke="#d4af37" stroke-width="1"/>
+  <!-- Golden band (Hizam) -->
+  <rect x="4" y="12" width="24" height="4" fill="#d4af37"/>
+  <!-- Door (golden) -->
+  <rect x="13" y="18" width="6" height="12" fill="#d4af37" rx="1"/>
+  <!-- Top decorative element -->
+  <rect x="4" y="7" width="24" height="2" fill="#d4af37"/>
+</svg>

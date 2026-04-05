@@ -3,6 +3,7 @@ import { useCallback } from "react";
 import Image from "next/image";
 import { useAudio, useKey } from "react-use";
 
+import { getTextDirection } from "@/lib/arabic";
 import { challenges } from "@/db/schema";
 import { cn } from "@/lib/utils";
 
@@ -73,8 +74,10 @@ export const Card = ({
       >
         {type === "ASSIST" && <div aria-hidden />}
         <p
+          dir={getTextDirection(text)}
           className={cn(
             "text-sm text-neutral-600 lg:text-base",
+            getTextDirection(text) === "rtl" && "font-arabic text-2xl lg:text-3xl",
             selected && "text-sky-500",
             selected && status === "correct" && "text-green-500",
             selected && status === "wrong" && "text-rose-500"

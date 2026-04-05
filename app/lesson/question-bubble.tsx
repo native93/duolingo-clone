@@ -1,10 +1,15 @@
 import Image from "next/image";
 
+import { getTextDirection } from "@/lib/arabic";
+import { cn } from "@/lib/utils";
+
 type QuestionBubbleProps = {
   question: string;
 };
 
 export const QuestionBubble = ({ question }: QuestionBubbleProps) => {
+  const direction = getTextDirection(question);
+
   return (
     <div className="mb-6 flex items-center gap-x-4">
       <Image
@@ -22,7 +27,13 @@ export const QuestionBubble = ({ question }: QuestionBubbleProps) => {
         className="block lg:hidden"
       />
 
-      <div className="relative rounded-xl border-2 px-4 py-2 text-sm lg:text-base">
+      <div
+        dir={direction}
+        className={cn(
+          "relative rounded-xl border-2 px-4 py-2 text-sm lg:text-base",
+          direction === "rtl" && "font-arabic text-2xl lg:text-3xl"
+        )}
+      >
         {question}
 
         <div

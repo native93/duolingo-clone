@@ -13,7 +13,7 @@ import "./globals.css";
 const font = Nunito({ subsets: ["latin"] });
 
 export const viewport: Viewport = {
-  themeColor: "#22C55E",
+  themeColor: "#0D9488", // teal-600
 };
 
 export const metadata: Metadata = siteConfig;
@@ -27,10 +27,10 @@ export default function RootLayout({
     <ClerkProvider
       appearance={{
         layout: {
-          logoImageUrl: "/favicon.ico",
+          logoImageUrl: "/kaaba.svg",
         },
         variables: {
-          colorPrimary: "#22C55E",
+          colorPrimary: "#0D9488", // teal-600
         },
       }}
       afterSignOutUrl="/"

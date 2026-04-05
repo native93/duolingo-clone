@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { upsertChallengeProgress } from "@/actions/challenge-progress";
 import { reduceHearts } from "@/actions/user-progress";
 import { MAX_HEARTS } from "@/constants";
-import { challengeOptions, challenges, userSubscription } from "@/db/schema";
+import { challengeOptions, challenges } from "@/db/schema";
 import { useHeartsModal } from "@/store/use-hearts-modal";
 import { usePracticeModal } from "@/store/use-practice-modal";
 
@@ -29,11 +29,6 @@ type QuizProps = {
     completed: boolean;
     challengeOptions: (typeof challengeOptions.$inferSelect)[];
   })[];
-  userSubscription:
-    | (typeof userSubscription.$inferSelect & {
-        isActive: boolean;
-      })
-    | null;
 };
 
 export const Quiz = ({
@@ -41,7 +36,6 @@ export const Quiz = ({
   initialHearts,
   initialLessonId,
   initialLessonChallenges,
-  userSubscription,
 }: QuizProps) => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [correctAudio, _c, correctControls] = useAudio({ src: "/correct.wav" });
@@ -187,10 +181,7 @@ export const Quiz = ({
 
           <div className="flex w-full items-center gap-x-4">
             <ResultCard variant="points" value={challenges.length * 10} />
-            <ResultCard
-              variant="hearts"
-              value={userSubscription?.isActive ? Infinity : hearts}
-            />
+            <ResultCard variant="hearts" value={hearts} />
           </div>
         </div>
 
@@ -212,11 +203,7 @@ export const Quiz = ({
     <>
       {incorrectAudio}
       {correctAudio}
-      <Header
-        hearts={hearts}
-        percentage={percentage}
-        hasActiveSubscription={!!userSubscription?.isActive}
-      />
+      <Header hearts={hearts} percentage={percentage} />
 
       <div className="flex-1">
         <div className="flex h-full items-center justify-center">
